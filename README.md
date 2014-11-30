@@ -1,4 +1,4 @@
-HMC5883L_Simple
+ESP8266_Simple
 ===============
 
 Simple to use Arduino library to interface to ESP8266 Wifi (802.11 b/g/n) Module
