@@ -31,13 +31,12 @@ Usage
 
 Open the HelloWorld example, it really is as simple as can be.
 
-Status
+Caveats
 --------------------------
 
-Only making HTTP GET requests are supported so far.  
-HTTP Server mode will be implemented next.
-Currently only the ESP8266 single connection at a time mode is supported, not MUX.
+Not multi-threaded, you can request or serve one thing at a time.
 Only SoftwareSerial is supported currently, although I will eventually make it work with HardwareSerial as well probably.
+This is all very experimental.
 
 Patches Welcome
 --------------------------
