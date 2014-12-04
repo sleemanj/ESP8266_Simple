@@ -26,6 +26,12 @@ The 3.3v supply must be quite "strong", the on-board 3.3v (if any) that your Ard
 
 ![Example Wiring Diagram for ESP8266 Level Shifted with Zeners to Arduino](arduino-wiring-diagram.jpg?raw=true "Example Wiring Diagram")
 
+There are a few different modules of ESP8266, this is the most common.
+
+![Pinout Of Common (V091) ESP8266 Module](esp8266-091.jpg?raw=true "Pinout Of Common (V091) ESP8266 Module")
+
+
+
 Usage
 --------------------------
 
