@@ -27,6 +27,12 @@
 #include <SoftwareSerial.h>
 #include <ESP8266_Simple.h>
 
+// These are the SSID and PASSWORD to connect to your Wifi Network
+//  put details appropriate for your network between the quote marks,
+//  eg  #define ESP8266_SSID "YOUR_SSID"
+#define ESP8266_SSID  ""
+#define ESP8266_PASS  ""
+
 // Create the ESP8266 device on pins 
 //   8 for Arduino RX (TX on ESP connects to this pin) 
 //   9 for Arduino TX (RX on ESP connects to this pin)
@@ -50,17 +56,13 @@
 
 ESP8266_Simple wifi(8,9);
 
-// These are the SSID and PASSWORD to connect to your Wifi Network
-#define ESP8266_SSID  "YOUR_SSID_HERE"
-#define ESP8266_PASS  "YOUR_PASS_HERE"
-
 void setup()
 {
   // As usual, we will output debugging information to the normal
   // serial port, the wifi runs on SoftwareSerial using the pins 
   // set above so it does not interfere with your normal debugging.
   Serial.begin(115200);
-  Serial.println("ESP8266 Demo Sketch");
+  Serial.println("ESP8266 Demo Server Sketch");
 
   // Set the baud rate, this depends on your ESP8266's previous setup
   // as it remembers the rate.  9600 is the default for recent firmware
@@ -131,16 +133,17 @@ unsigned long httpMillis(char *buffer, int bufferLength)
   // empty the buffer
   memset(buffer,0,bufferLength);
   
-  // Fill it with our HTML response (note, take care about the bufferLength available, your response
-  // must fit in the buffer.
+  // Fill it with our HTML response (note, take care about the bufferLength 
+  //  available, your entire response must fit in the buffer.
   strncpy_P(buffer, PSTR("<h1>Millis</h1><p>The current millis() are: "), bufferLength-strlen(buffer));
   ultoa(millis(),buffer+strlen(buffer),10);
   strncpy_P(buffer+strlen(buffer), PSTR("</p>"), bufferLength-strlen(buffer));        
 
   // And return the type and HTTP response code combined with "|" (bitwise or)
   // Valid  types are: ESP8266_HTML, ESP8266_TEXT, ESP8266_RAW
-  // Valid  response codes are: any standard HTTP response code (typically, 200 for OK, 404 for not found, and 500 for error)
-  // The RAW type is sent without adding any headers, the other types add HTTP headers appropriately.
+  // Valid  response codes are: any standard HTTP response code
+  // The RAW type is sent without adding any headers, the other types add HTTP 
+  // headers appropriately.
   
   return ESP8266_HTML | 200;  
 }

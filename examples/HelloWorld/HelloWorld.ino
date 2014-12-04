@@ -27,6 +27,12 @@
 #include <SoftwareSerial.h>
 #include <ESP8266_Simple.h>
 
+// These are the SSID and PASSWORD to connect to your Wifi Network
+//  put details appropriate for your network between the quote marks,
+//  eg  #define ESP8266_SSID "YOUR_SSID"
+#define ESP8266_SSID  ""
+#define ESP8266_PASS  ""
+
 // Create the ESP8266 device on pins 
 //   8 for Arduino RX (TX on ESP connects to this pin) 
 //   9 for Arduino TX (RX on ESP connects to this pin)
@@ -50,9 +56,7 @@
 
 ESP8266_Simple wifi(8,9);
 
-// These are the SSID and PASSWORD to connect to your Wifi Network
-#define ESP8266_SSID  "PUT_YOUR_WIFI_SSID_HERE"
-#define ESP8266_PASS  "PUT_YOUR_WIFI_PASSWORD_HERE"
+
 
 void setup()
 {

@@ -80,13 +80,68 @@ class ESP8266_Simple
       ESP8266_Simple();      
 #endif
                   
-      // Connect to the ESP8266 device
+      /**
+       * Begin the ESP8266 Connection
+       * 
+       * @param baudRate The rate to communicate with the device, typically 9600 
+       * @return ESP8266_OK, or an error code
+       */
+      
       byte begin(long baudRate);    
       
-      // Super Easy Commands
+      /** 
+       * Connect to an existing WIFI network and get an IP address from it with DHCP.
+       * Optionally print information to a Print class (eg, "&Serial")
+       * 
+       * @param SSID The SSID to connect to.
+       * @param Password The Password for this wifi network.
+       * @param debugPrinter An optional place to print some information (eg, &Serial)
+       * 
+       * @return ESP8266_OK, or an error code
+       */
+      
       byte setupAsWifiStation(const char *SSID, const char *Password, Print *debugPrinter = NULL);
       
+      /**
+       * Perform an HTTP GET operation to get data from a server on the network (or internet).
+       *  F() macro version.
+       * 
+       * See the HelloWorld example for more information.
+       * 
+       * @param serverIp The IP address of the server provided via the F() macro (eg, F("127.0.0.1"))
+       * @param port     The port to connect to
+       * @param requestPathAndResponseBuffer A buffer location which contains the request and will
+       *   be over-written with the response.  THe request consists of a path string (eg, "/foo")
+       * @param bufferLength The length of the buffer in bytes.
+       * @param httpHost The hostname you are connecting to, required for virtual servers with more
+       *  than one host per IP, and if you wish to get headers (eg, F("example.com"))
+       * @param bodyResponseOnlyFromLine If set to 1, only the body is returned, if set to 0, the 
+       *   heaaders are also returned, if set to -1, only the headers are returned, if set to a
+       *   number greater than 1, only the body from that line number is returned.
+       * 
+       * @return  ESP8266_OK, or an error code
+       */
+      
       unsigned int GET(const __FlashStringHelper *serverIp, int port, char *requestPathAndResponseBuffer, int bufferLength, const __FlashStringHelper *httpHost = NULL, int bodyResponseOnlyFromLine = 1);
+      
+      /** Start an "HTTP Server" with a number of "handlers" provided to serve various
+       *   requests.
+       * 
+       * See the HTTP_Server example for more information.
+       * 
+       * @param port The port to open, usually 80 for HTTP
+       * @param httpServerHandlers an array of handlers, see the HTTP_Server example for 
+       *    demonstration of this.
+       * @param numOfHandlers the size of said array of handlers
+       * @param maxBufferSize the size of the buffer to use when serving requests, this
+       *  buffer must be big enough to hold your desired response(s) in full.
+       * @param debugPrinter   An optional place to print some information (eg, &Serial)
+       * 
+       * @return ESP8266_OK, or an error code
+       */
+      byte startHttpServer(unsigned port, ESP8266_HttpServerHandler *httpServerHandlers, unsigned int numOfHandlers, unsigned int maxBufferSize= 250, Print *debugPrinter = NULL);
+      
+      
       unsigned int GET(unsigned long serverIp, int port, char *requestPathAndResponseBuffer, int bufferLength, const __FlashStringHelper *httpHost = NULL, int bodyResponseOnlyFromLine = 1);
       
       
@@ -111,7 +166,7 @@ class ESP8266_Simple
       // Disconnect from access point
       byte disconnectFromWifi();            
       
-      byte startHttpServer(unsigned port, ESP8266_HttpServerHandler *httpServerHandlers, unsigned int numOfHandlers, unsigned int maxBufferSize= 250, Print *debugPrinter = NULL);
+
       byte startHttpServer(unsigned int port, unsigned long (* requestHandler)(char *buffer, int bufferLength), unsigned int maxBufferSize = 250);
       byte stopHttpServer();
       
@@ -122,10 +177,10 @@ class ESP8266_Simple
       //  and return an integer response code combined with a bitmask that indicates
       //  response type
       //
-      //   return ESP8266_HTML & 200;
-      //   return ESP8266_TEXT & 200;
-      //   return ESP8266_TEXT & 404;
-      //   return ESP8266_RAW  & 200; --- RAW will mean that you have put headers into the buffer
+      //   return ESP8266_HTML | 200;
+      //   return ESP8266_TEXT | 200;
+      //   return ESP8266_TEXT | 404;
+      //   return ESP8266_RAW  | 200; --- RAW will mean that you have put headers into the buffer
       //
       //  returns ESP8266_OK/ERROR
       byte serveHttpRequest();

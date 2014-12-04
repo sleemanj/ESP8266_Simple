@@ -29,13 +29,15 @@ The 3.3v supply must be quite "strong", the on-board 3.3v (if any) that your Ard
 Usage
 --------------------------
 
-Open the HelloWorld example, it really is as simple as can be.
+Open the HelloWorld example, it really is as simple as can be.  Also provided is an HTTP Server example.
 
 Caveats
 --------------------------
 
 Not multi-threaded, you can request or serve one thing at a time.
+
 Only SoftwareSerial is supported currently, although I will eventually make it work with HardwareSerial as well probably.
+
 This is all very experimental.
 
 Patches Welcome

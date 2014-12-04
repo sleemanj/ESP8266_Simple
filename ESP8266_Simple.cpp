@@ -59,6 +59,15 @@ byte ESP8266_Simple::begin(long baudRate)
 
 byte ESP8266_Simple::setupAsWifiStation(const char *SSID, const char *Password, Print *debugPrinter)
 {
+  if(!strlen(SSID) || !strlen(Password))
+  {
+    if(debugPrinter)
+    {
+      debugPrinter->println(F("Missing SSID/Password, see sketch #defines."));
+      while(1);
+    }
+  }
+    
   byte responseCode;
   
   // Reset the ESP8266 Device (soft reset)
