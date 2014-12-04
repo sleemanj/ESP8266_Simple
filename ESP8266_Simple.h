@@ -54,7 +54,17 @@
 #define ESP8266_AP      2
 #define ESP8266_BOTH    3
 
+#define ESP8266_HTML    0x01000000
+#define ESP8266_TEXT    0x02000000
+#define ESP8266_RAW     0x04000000
+
 #include "ESP8266_Serial.h"
+
+struct ESP8266_HttpServerHandler
+{
+    const char     *requestMatches;
+    unsigned long (* handlerFunction)(char *, int);
+};
 
 class ESP8266_Simple
 {
@@ -66,6 +76,7 @@ class ESP8266_Simple
 #endif
       
 #if ESP8266_SERIALMODE == ESP8266_HARDWARESERIAL
+      // This isn't going to work yet, TBD
       ESP8266_Simple();      
 #endif
                   
@@ -81,7 +92,7 @@ class ESP8266_Simple
       
       // More General/Advanced Commands
       byte reset();      
-      byte getFirmwareVersion(long &versionResponse);            // firmware version put int versionResponse
+      byte getFirmwareVersion(long &versionResponse);            // firmware version put into versionResponse
       byte setWifiMode(byte mode);                               // ESP8266_STATION, ESP8266_AP, ESP8266_BOTH
       byte getAccessPointsList(char *buffer, int bufferSize );   // puts into buffer
       byte getIPAddress(unsigned long &ipAddress);               // ip address put into ipAddress (as 32 bits)
@@ -100,7 +111,8 @@ class ESP8266_Simple
       // Disconnect from access point
       byte disconnectFromWifi();            
       
-      byte startHttpServer(unsigned int port, int (* requestHandler)(char *buffer, int requestLength, int bufferLength));
+      byte startHttpServer(unsigned port, ESP8266_HttpServerHandler *httpServerHandlers, unsigned int numOfHandlers, unsigned int maxBufferSize= 250, Print *debugPrinter = NULL);
+      byte startHttpServer(unsigned int port, unsigned long (* requestHandler)(char *buffer, int bufferLength), unsigned int maxBufferSize = 250);
       byte stopHttpServer();
       
       // Implements a naieve HTTP server. When a get request comes in, it it passed to
@@ -115,8 +127,8 @@ class ESP8266_Simple
       //   return ESP8266_TEXT & 404;
       //   return ESP8266_RAW  & 200; --- RAW will mean that you have put headers into the buffer
       //
-      //  The function will return 0 for nothing served, or the response code we issued otherwise
-      int serveHttpRequest();
+      //  returns ESP8266_OK/ERROR
+      byte serveHttpRequest();
       
       // Issue an HTTP Get Request to some destination IP address
       // the request string, null terminated, is placed in buffer      
@@ -169,10 +181,21 @@ class ESP8266_Simple
       unsigned long generalCommandTimeoutMicroseconds;
              
     protected:
-      unsigned int readIPD(char *responseBuffer, int responseBufferLength, int bodyResponseOnlyFromLine = 1, int *parseHttpResponse = NULL);
+      unsigned int readIPD(char *responseBuffer, int responseBufferLength, int bodyResponseOnlyFromLine = 1, int *parseHttpResponse = NULL, int *muxChannel = NULL);
       byte         unlinkConnection();
       
+      
+      
+      unsigned long (* httpServerRequestHandler)(char *, int );
+      unsigned int  httpServerMaxBufferSize;
+         
+      
+      unsigned long              httpServerRequestHandler_Builtin(char *buffer, int bufferLength);
+      ESP8266_HttpServerHandler *httpServerHandlers;
+      unsigned int               httpServerHandlersLength;      
+      
 };
+
 
 #endif
 

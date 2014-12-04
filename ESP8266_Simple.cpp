@@ -306,10 +306,69 @@ byte ESP8266_Simple::disconnectFromWifi()
   return this->sendCommand(F("AT+CWQAP"));  
 }
 
-byte ESP8266_Simple::startHttpServer(unsigned port, int (* requestHandler)(char *buffer, int requestLength, int bufferLength))
+byte ESP8266_Simple::startHttpServer(unsigned port, ESP8266_HttpServerHandler *httpServerHandlersArg, unsigned int numOfHandlers, unsigned int maxBufferSize, Print *debugPrinter) 
 {
+  byte responseCode;
   
-  return ESP8266_ERROR;
+  this->httpServerHandlers = httpServerHandlersArg;
+  this->httpServerHandlersLength = numOfHandlers;
+    
+  do
+  {
+    if(debugPrinter)
+    {
+        debugPrinter->print(F("Starting HTTP Server: "));
+    }
+    
+    if((responseCode = this->startHttpServer(port, (long unsigned int (*)(char*, int))NULL, maxBufferSize) != ESP8266_OK))
+    {
+      if(debugPrinter)
+      {
+        this->debugPrintError(responseCode, debugPrinter);
+      }           
+    }
+    else
+    {        
+      if(debugPrinter)
+      {
+        debugPrinter->println(F("OK"));
+      }
+      break;
+    }
+  }
+  while(1);
+  
+  
+  return ESP8266_OK;
+}
+
+
+byte ESP8266_Simple::startHttpServer(unsigned port, unsigned long (* requestHandler)(char *buffer, int bufferLength), unsigned int maxBufferSize)
+{
+  char cmdBuffer[64];
+  byte responseCode;
+  
+  this->httpServerRequestHandler = requestHandler;
+  this->httpServerMaxBufferSize = maxBufferSize;
+  
+  // Enter MUX mode
+  responseCode = this->sendCommand(F("AT+CIPMUX=1"));
+  if(responseCode != ESP8266_OK) return responseCode;
+  
+  // Set Server Timeout
+  memset(cmdBuffer,0,sizeof(cmdBuffer));
+  strcpy_P(cmdBuffer, PSTR("AT+CIPSTO=,"));
+  ultoa(this->generalCommandTimeoutMicroseconds/1000/1000, cmdBuffer+strlen(cmdBuffer), 10);    
+  this->sendCommand(cmdBuffer);
+  
+  // Start Server
+  memset(cmdBuffer,0,sizeof(cmdBuffer));
+  strcpy_P(cmdBuffer, PSTR("AT+CIPSERVER=1,"));
+  itoa(port, cmdBuffer+strlen(cmdBuffer), 10);    
+  responseCode = this->sendCommand(cmdBuffer);
+  if(responseCode != ESP8266_OK) return responseCode;
+    
+  return ESP8266_OK;
 }
 
 byte ESP8266_Simple::stopHttpServer()
@@ -317,11 +376,112 @@ byte ESP8266_Simple::stopHttpServer()
   return ESP8266_ERROR;
 }
 
-int ESP8266_Simple::serveHttpRequest()
+byte ESP8266_Simple::serveHttpRequest()
 {
-  return ESP8266_ERROR;
+  if(!this->espSerial->available()) return ESP8266_OK; // Nothing to do
+
+  char cmdBuffer[64];
+  char hdrBuffer[45];     
+  
+  char dataBuffer[this->httpServerMaxBufferSize];
+  int  requestLength;
+  byte responseCode;
+  unsigned long  httpStatusCodeAndType;
+  int  muxChannel = -1; // This will be set by readIPD(), we need to start with -1
+                        // to indicate we will accept any channel, we will get
+                        // packet data for whatever channel is first off the block
+                        // any inter-mingled packet data from other channels is discarded
+                        // for best results, only issue one request at a time!
+  
+  memset(dataBuffer,0,sizeof(dataBuffer));
+  
+  if((requestLength = this->readIPD(dataBuffer,sizeof(dataBuffer),-1,NULL,&muxChannel)))
+  {
+    // Call the handler, note we reserve the last byte of the data buffer
+    // it will always be null for safety
+    if(this->httpServerRequestHandler)
+    {
+      httpStatusCodeAndType = (*(this->httpServerRequestHandler))(dataBuffer,sizeof(dataBuffer)-1);
+    }
+    else
+    {      
+      httpStatusCodeAndType = this->httpServerRequestHandler_Builtin(dataBuffer, sizeof(dataBuffer)-1);
+    }
+    
+    // Ensure that the last byte of the buffer is null for safety
+    dataBuffer[sizeof(dataBuffer)-1] = 0;
+    
+    // Clear header and command buffer
+    memset(hdrBuffer, 0, sizeof(hdrBuffer));
+    memset(cmdBuffer,0,sizeof(cmdBuffer));
+    
+    // If it's not a raw response, make some headers
+    if(!(httpStatusCodeAndType & ESP8266_RAW))
+    {
+      strncpy_P(hdrBuffer, PSTR("HTTP/1.0 "), sizeof(hdrBuffer)-1);
+      itoa( httpStatusCodeAndType & 0x00FFFFFF,hdrBuffer+strlen(hdrBuffer), 10);
+      strncpy_P(hdrBuffer+strlen(hdrBuffer), PSTR("\r\nContent-type: "), sizeof(hdrBuffer)-strlen(hdrBuffer)-1);
+      
+      switch(httpStatusCodeAndType & 0xFF000000)
+      {
+        case ESP8266_HTML:
+          strncpy_P(hdrBuffer+strlen(hdrBuffer), PSTR("text/html"), sizeof(hdrBuffer)-strlen(hdrBuffer)-1);
+          break;
+          
+        case ESP8266_TEXT:
+          strncpy_P(hdrBuffer+strlen(hdrBuffer), PSTR("text/plain"), sizeof(hdrBuffer)-strlen(hdrBuffer)-1);
+          break;          
+
+      }
+      strncpy_P(hdrBuffer+strlen(hdrBuffer), PSTR("\r\n\r\n"), sizeof(hdrBuffer)-strlen(hdrBuffer)-1);
+    }
+    
+    // Create the send command which specifies the mux channel and data length    
+    strncpy_P(cmdBuffer,PSTR("AT+CIPSEND="),sizeof(cmdBuffer));
+    itoa(muxChannel,cmdBuffer+strlen(cmdBuffer),10); // With Mux
+    cmdBuffer[strlen(cmdBuffer)]=',';
+    itoa(strlen(hdrBuffer)+min(sizeof(dataBuffer)-1,strlen(dataBuffer)), cmdBuffer+strlen(cmdBuffer),10);
+    
+    if((responseCode = this->sendCommand(cmdBuffer)) != ESP8266_OK) 
+    {
+      return responseCode;
+    }
+    
+    this->espSerial->print(hdrBuffer);
+    this->espSerial->print(dataBuffer);
+    
+    memset(cmdBuffer,0,sizeof(cmdBuffer));
+    strncpy_P(cmdBuffer, PSTR("AT+CIPCLOSE="), sizeof(cmdBuffer)-1);
+    itoa(muxChannel, cmdBuffer+strlen(cmdBuffer),10);
+    if((responseCode = this->sendCommand(cmdBuffer)) != ESP8266_OK)
+    {
+      return responseCode;
+    }      
+  }
+  
+  return ESP8266_OK;
 }
 
+
+unsigned long ESP8266_Simple::httpServerRequestHandler_Builtin(char *buffer, int bufferLength)
+{    
+  // Loop through the handlers and do a string comparison on the buffer
+  // to see if this is what was requested
+  for(byte x = 0;x < this->httpServerHandlersLength; x++)
+  {
+    if(strncmp_P(buffer,this->httpServerHandlers[x].requestMatches,strlen_P(this->httpServerHandlers[x].requestMatches))==0)
+    {
+      // And if it was requested, pass off to the handler function to
+      // do whatever it needs to do.
+      return (this->httpServerHandlers[x].handlerFunction)(buffer, bufferLength);
+    }
+  }
+  
+  // If we didn't find a valid command, give a 404 of course!
+  memset(buffer, 0, bufferLength);  
+  //strcpy_P(buffer, PSTR("<h1>Error, Unknown Command</h1>\r\n<p>Try <a href=\"/millis\">/millis</a>, and <a href=\"/led\">/led</a></p>"));
+  return ESP8266_HTML | 404;
+}
 
 
 // serverIpAddress = ip address to connect to
@@ -364,7 +524,7 @@ byte ESP8266_Simple::sendHttpRequest( unsigned long serverIpAddress, int port,  
   int httpRequestDataLength =   4  + strlen(requestPathAndResponseBuffer) + 2;
   if(httpHost)
   {
-    //                        " HTTP/1.1\r\nHost: "                        "\r\n"
+    //                        " HTTP/1.0\r\nHost: "                        "\r\n"
     httpRequestDataLength +=          17            + strlen(httpHost)     + 2;
   }
   
@@ -434,12 +594,15 @@ byte ESP8266_Simple::sendHttpRequest( unsigned long serverIpAddress, int port,  
   return ESP8266_OK;    
 }
 
-unsigned int ESP8266_Simple::readIPD(char *responseBuffer, int responseBufferLength, int bodyResponseOnlyFromLine, int *parseHttpResponse)
+unsigned int ESP8266_Simple::readIPD(char *responseBuffer, int responseBufferLength, int bodyResponseOnlyFromLine, int *parseHttpResponse, int *muxChannel)
 {  
   if(!this->espSerial->waitUntilAvailable()) return 0;
   
  // Serial.print("BRFL: ");
  // Serial.println(bodyResponseOnlyFromLine);
+  
+  unsigned long startTime         = millis();
+  unsigned long firstPacketWait   = this->generalCommandTimeoutMicroseconds*1000; // If we don't get a packet in this time, abort
   
   char cmdBuffer[128];
   
@@ -451,13 +614,14 @@ unsigned int ESP8266_Simple::readIPD(char *responseBuffer, int responseBufferLen
   int packetLength            = -1;
   int bytesRead               = 0;
   int lineNumber              = -1;
+  int packetCount             = 0;
   
   // For HTTP parsing only
   byte headerEnd              = 0;
  
   do
   {
-    this->espSerial->waitUntilAvailable();
+    if(!this->espSerial->waitUntilAvailable()) continue;
     
     if(packetLength == -1)
     { // Look for the +IPD response from the ESP8266 to get the number of bytes to read
@@ -472,7 +636,7 @@ unsigned int ESP8266_Simple::readIPD(char *responseBuffer, int responseBufferLen
         if(cmdBuffer[bytesRead-1] == ':')
         {
           // There might be whitespace at the start of this line, we are looking at 
-          //  +IPD,1234
+          //  +IPD[,mux#],1234
           //  where 1234 is the number of bytes to follow, 
           //  so we will walk backwards to find the , and then from that point forward
           //  convert to an integer
@@ -481,7 +645,26 @@ unsigned int ESP8266_Simple::readIPD(char *responseBuffer, int responseBufferLen
             if(cmdBuffer[cmdBufferIndex-1] == ',') break;
           }
           packetLength = atoi(cmdBuffer+cmdBufferIndex);   
+          packetCount++;
         
+          // We also might want to find a mux channel
+          for(cmdBufferIndex = cmdBufferIndex-2; cmdBufferIndex >= 0; cmdBufferIndex--)
+          {
+            if(cmdBuffer[cmdBufferIndex-1] == ',') break;
+          }                    
+          if(cmdBufferIndex)
+          {
+            // If we get a mux channel, compare it to the request one, if it 
+            // isn't a match, skip this packet (but we keep the packetCount)
+            if(muxChannel && (*muxChannel < 0)) *muxChannel = atoi(cmdBuffer+cmdBufferIndex);
+            else if(muxChannel && (*muxChannel != atoi(cmdBuffer+cmdBufferIndex)))
+            {
+              // ignore this packet, it's not for us
+              this->clearSerialBuffer();
+              packetLength = -1;
+            }
+          }
+          
           ESP82336_DEBUG("Packet Length: ");
           ESP82336_DEBUGLN(packetLength);
         }
@@ -500,7 +683,9 @@ unsigned int ESP8266_Simple::readIPD(char *responseBuffer, int responseBufferLen
       continue;      
     }
     else
-    {      
+    { 
+      startTime = millis(); // Reset the start time every time we read in (part of) a packet
+      
       // If packet is empty, or responseBuffer is full, just 
       // finish up now and discard everything
       if(min(packetLength,responseBufferLength-responseBufferIndex-1) <= 0)
@@ -614,6 +799,20 @@ unsigned int ESP8266_Simple::readIPD(char *responseBuffer, int responseBufferLen
         memset(responseBuffer,0,responseBufferLength);
         responseBufferIndex = 0;        
       }
+      else if(bodyResponseOnlyFromLine < 0)
+      { 
+        // A negative response means get ONLY headers (from the abs line)
+        if( responseBuffer[responseBufferIndex-1] == '\n'
+         && ( 
+             (strlen(responseBuffer) >= 2 && responseBuffer[responseBufferIndex-2] == '\n') // \n\n[NULL]
+          || (strlen(responseBuffer) >= 4 && responseBuffer[responseBufferIndex-3] == '\n') // \r\n\r\n[NULL]
+         )
+        )
+        {
+          // done
+          break;
+        }        
+      }
      
       
       // If there is room in the buffer and more to be got, try to get more
@@ -632,7 +831,7 @@ unsigned int ESP8266_Simple::readIPD(char *responseBuffer, int responseBufferLen
       break;
     }    
   }
-  while(1); //  Timeout to go here
+  while(millis() - startTime < (packetCount ? firstPacketWait : (this->generalCommandTimeoutMicroseconds*1000))); //  Timeout to go here
   
   
   return responseBufferIndex;
@@ -839,6 +1038,7 @@ byte ESP8266_Simple::sendCommand(const char **cmdPartsToConcatenate, byte numPar
           
           if(strncmp_P(statusBuffer, PSTR("SEND OK"),  7) == 0) return ESP8266_OK;
           if(strncmp_P(statusBuffer, PSTR("OK"),       2) == 0) return ESP8266_OK;
+          
           if(strncmp_P(statusBuffer, PSTR(">"),        1) == 0) return ESP8266_OK;
           if(strncmp_P(statusBuffer, PSTR("ERROR"),    5) == 0) return ESP8266_ERROR;                                
           if(strncmp_P(statusBuffer, PSTR("nochange"), 8) == 0) return ESP8266_OK;         
@@ -846,6 +1046,7 @@ byte ESP8266_Simple::sendCommand(const char **cmdPartsToConcatenate, byte numPar
           if(strncmp_P(statusBuffer, PSTR("ready"),    5) == 0) return ESP8266_READY;            
           if(strncmp_P(statusBuffer, PSTR("busy"),     4) == 0) return ESP8266_BUSY;    
           if(strncmp_P(statusBuffer, PSTR("Unlink"),   6) == 0) return ESP8266_OK;
+          if(strncmp_P(statusBuffer, PSTR("Link is builded"), 15) == 0) return ESP8266_OK;
           
           // If we are using a response buffer, and we have reached the start line
           // requested (defaults to line 1)        
