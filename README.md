@@ -15,6 +15,8 @@ Download, Install and Example
   
 Note the standard Serial baud rate is set to 115k so be sure to select that in your terminal, we want our debugging terminal as fast as possible so that we can keep up with the ESP8266 on the SoftwareSerial connection and avoid buffer overflows.
 
+However, **if your particular Arduino has trouble communicating on it's serial port at 115k (you get continual garbage in the serial terminal), you can drop it down, just change the value in the sketch**.  Usually it's fine, but technically speaking it's pushing limits a bit with 16MHz crystals.
+
 Connecting To Your Arduino
 --------------------------
 
