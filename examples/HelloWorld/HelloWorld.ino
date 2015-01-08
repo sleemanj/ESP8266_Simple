@@ -63,7 +63,7 @@ void setup()
   // As usual, we will output debugging information to the normal
   // serial port, the wifi runs on SoftwareSerial using the pins 
   // set above so it does not interfere with your normal debugging.
-  Serial.begin(115200);
+  Serial.begin(115200); // Reduce this if your Arduino has trouble talking so fast
   Serial.println("ESP8266 Demo Sketch");
 
   // Set the baud rate, this depends on your ESP8266's previous setup
