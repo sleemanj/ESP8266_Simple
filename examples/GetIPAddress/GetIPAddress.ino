@@ -37,7 +37,7 @@ ESP8266_Simple wifi(8,9);
 
 void setup()
 {  
-  Serial.begin(115200);
+  Serial.begin(115200); // Reduce this if your Arduino has trouble talking so fast
   Serial.println("ESP8266 Demo Sketch");
 
   wifi.begin(9600);  
