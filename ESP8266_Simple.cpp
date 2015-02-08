@@ -1003,7 +1003,7 @@ byte ESP8266_Simple::sendCommand(const char **cmdPartsToConcatenate, byte numPar
       // hope it never happens
       if(this->espSerial->overflow())
       {
-        Serial.println("Overflow in HERE");
+        ESP82336_DEBUGLN("Overflow in HERE");
         this->clearSerialBuffer();
         return ESP8266_OVERFLOW;   
       }

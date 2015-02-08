@@ -40,11 +40,15 @@
 #define ESP8266_READY          4
 #define ESP8266_BUSY           5
 
-#define ESP82336_DEBUG(...)   Serial.print(__VA_ARGS__); 
-#define ESP82336_DEBUGLN(...) Serial.println(__VA_ARGS__); 
-
-#define ESP82336_DEBUG(...)
-#define ESP82336_DEBUGLN(...)
+// Don't define serial debug macros for chips that don't have hardware serial.
+#if defined(__AVR_ATtiny24__) || defined(__AVR_ATtiny44__) || defined(__AVR_ATtiny84__) || \
+    defined(__AVR_ATtiny25__) || defined(__AVR_ATtiny45__) || defined(__AVR_ATtiny85__)
+  #define ESP82336_DEBUG(...)
+  #define ESP82336_DEBUGLN(...)
+#else
+  #define ESP82336_DEBUG(...)   Serial.print(__VA_ARGS__);
+  #define ESP82336_DEBUGLN(...) Serial.println(__VA_ARGS__);
+#endif  // __AVR_ATtinyX check
 
 #ifndef ESP8266_SERIALMODE
   #define ESP8266_SERIALMODE   ESP8266_SOFTWARESERIAL
