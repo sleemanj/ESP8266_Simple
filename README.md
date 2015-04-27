@@ -3,6 +3,11 @@ ESP8266_Simple
 
 Simple to use Arduino library to interface to ESP8266 Wifi (802.11 b/g/n) Module
 
+Firmware Version (Patches Welcome!)
+------------------------------------
+
+This library was written when 0.9.2.4 was the common firmware on ESP8266 devices (roughly late 2014 through to somewhere around march-april 2015).  If you have a more recent firmware it may or may not work, there have been some changes to the AT command set in recent firmwares which I have not had a chance to update the library to work with (for starters, the format of the response to querying the IP assigned to the device has changed).
+
 Download, Install and Example
 -----------------------------
 
