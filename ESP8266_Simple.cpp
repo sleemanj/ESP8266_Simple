@@ -462,7 +462,7 @@ byte ESP8266_Simple::serveHttpRequest()
     //memset(cmdBuffer,0,sizeof(cmdBuffer));
     //strncpy_P(cmdBuffer, PSTR("AT+CIPCLOSE="), sizeof(cmdBuffer)-1);
     //itoa(muxChannel, cmdBuffer+strlen(cmdBuffer),10);
-    if((responseCode = this->sendCommand("AT+CIPCLOSE=0\r\n"))) != ESP8266_OK)
+    if((responseCode = this->sendCommand("AT+CIPCLOSE=0\r\n")) != ESP8266_OK)
     {
       return responseCode;
     }      
