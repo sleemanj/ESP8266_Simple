@@ -19,8 +19,8 @@ You must pull GPIO0 to ground and reset the module before trying to upload the f
 
 ### v0.9.5.2
 
-ai-thinker-0.9.5.2-9600.bin - The default baud rate is 9600
-ai-thinker-0.9.5.2-115200.bin - The default baud rate is 115200
+[ai-thinker-0.9.5.2-9600.bin](https://cdn.rawgit.com/sleemanj/ESP8266_Simple/master/firmware/ai-thinker-0.9.5.2-9600.bin) - The default baud rate is 9600
+[ai-thinker-0.9.5.2-115200.bin](https://cdn.rawgit.com/sleemanj/ESP8266_Simple/master/firmware/ai-thinker-0.9.5.2-115200.bin) - The default baud rate is 115200
 
 
 ### v1.1.1
@@ -29,4 +29,4 @@ ai-thinker-0.9.5.2-115200.bin - The default baud rate is 115200
 
 I believe that some ESP modules do not have a large enough flash chip for versions 1.0 and greater.  I think it requires at least 8 Megabit flash (1 Megabyte).  Before you try flashing this you should confirm your ESP has 8 Megabit installed. Refer: http://bbs.ai-thinker.com/forum.php?mod=viewthread&tid=984&extra=page%3D1
 
-ai-thinker-v1.1.1-115200.bin - the default baud rate is 115200
+[ai-thinker-v1.1.1-115200.bin](https://cdn.rawgit.com/sleemanj/ESP8266_Simple/master/firmware/ai-thinker-v1.1.1-115200.bin) - the default baud rate is 115200
