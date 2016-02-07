@@ -150,7 +150,7 @@ byte ESP8266_Simple::setupAsWifiStation(const char *SSID, const char *Password, 
   } while(responseCode != ESP8266_OK);
 
   
-  
+  return 1;
 }
 
 unsigned int ESP8266_Simple::GET(const __FlashStringHelper *serverIp, int port, char *requestPathAndResponseBuffer, int bufferLength, const __FlashStringHelper *httpHost, int bodyResponseOnlyFromLine)
@@ -222,12 +222,55 @@ byte ESP8266_Simple::reset()
 
 byte ESP8266_Simple::getFirmwareVersion(long &versionResponse)
 {
-  char buffer[11];
-  byte responseCode = this->sendCommand(F("AT+GMR"), buffer, 11);
+  // 0.9.2.4 returns just a single value
+  // 0.9.5.2 returns 
+  //  AT version:0.21.0.0
+  //  SDK version:0.9.5 <--- Notice there is no .2 !
+  
+  char buffer[32] = { 0 };
+  
+  byte responseCode;
+  versionResponse = 0;
+  
+  // This handles 0.9.5.2
+  //  each part is encoded to 8 bytes and put into the 32 bit long
+  //  
+  //  IE 0.9.5 becomes
+  //  
+  responseCode = this->sendCommand(F("AT+GMR"), buffer, sizeof(buffer), 2); 
+  if(responseCode == ESP8266_OK)
+  {    
+    buffer[sizeof(buffer)-1] = 0; // Ensure string is terminated
+    if(buffer[11] == ':')
+    {
+      responseCode = 0; // Reuse this for number of bytes
+      
+      for(byte i = 12; i < sizeof(buffer); i++) 
+      {   
+        versionResponse = (versionResponse<<8) | atol(buffer+i);        
+        responseCode++;
+        while(buffer[++i] != '.')
+        {
+          if(i >= sizeof(buffer)) break;
+        }
+      }
+      
+      while(responseCode < 4) 
+      { 
+        versionResponse = versionResponse << 8; 
+        responseCode++;       
+      }
+    }
+      
+    if(versionResponse > 0) return ESP8266_OK;
+  }
+  
+  // This should do 0.9.2.4
+  responseCode = this->sendCommand(F("AT+GMR"), buffer, sizeof(buffer));
   if(responseCode == ESP8266_OK)
   {
-    buffer[10] = 0; // Ensure string is terminated after 10 characters
-    versionResponse = atol(buffer);    
+    buffer[sizeof(buffer)-1] = 0; // Ensure string is terminated after 10 characters
+    versionResponse = atol(buffer);        
   }
   return responseCode;
 }
@@ -249,9 +292,16 @@ byte ESP8266_Simple::getIPAddress(unsigned long &ipAddress)
 {
   char buffer[16]; // [3].[3].[3].[3][NUL]
   byte errCode;
-  
-  errCode     = this->sendCommand(F("AT+CIFSR"), buffer, sizeof(buffer));
-  if(errCode) return errCode;
+    
+  errCode     = this->sendCommand(F("AT+CIPSTA?"), buffer, sizeof(buffer)); // 0.9.5.2
+  if(errCode) 
+  {
+    errCode     = this->sendCommand(F("AT+CIFSR"), buffer, sizeof(buffer)); // 0.9.2.4
+    if(errCode)
+    {
+      return errCode;
+    }
+  }
   
   this->ipConvertDatatypeFromTo(buffer, ipAddress);
   
@@ -390,7 +440,7 @@ byte ESP8266_Simple::serveHttpRequest()
   if(!this->espSerial->available()) return ESP8266_OK; // Nothing to do
 
   char cmdBuffer[64];
-  char hdrBuffer[45];     
+  char hdrBuffer[64];     
   
   char dataBuffer[this->httpServerMaxBufferSize];
   int  requestLength;
@@ -442,6 +492,8 @@ byte ESP8266_Simple::serveHttpRequest()
           break;          
 
       }
+      strncpy_P(hdrBuffer + strlen(hdrBuffer), PSTR("\r\nContent-Length: "), sizeof(hdrBuffer) - strlen(hdrBuffer) - 1);
+      itoa(strlen(dataBuffer), hdrBuffer + strlen(hdrBuffer), 10);
       strncpy_P(hdrBuffer+strlen(hdrBuffer), PSTR("\r\n\r\n"), sizeof(hdrBuffer)-strlen(hdrBuffer)-1);
     }
     
@@ -458,14 +510,18 @@ byte ESP8266_Simple::serveHttpRequest()
     
     this->espSerial->print(hdrBuffer);
     this->espSerial->print(dataBuffer);
-    
+        
     memset(cmdBuffer,0,sizeof(cmdBuffer));
     strncpy_P(cmdBuffer, PSTR("AT+CIPCLOSE="), sizeof(cmdBuffer)-1);
     itoa(muxChannel, cmdBuffer+strlen(cmdBuffer),10);
     if((responseCode = this->sendCommand(cmdBuffer)) != ESP8266_OK)
     {
       return responseCode;
-    }      
+    } 
+    else
+    {
+      ESP82336_DEBUGLN("SERVER COMPLETED OK");
+    }
   }
   
   return ESP8266_OK;
@@ -611,7 +667,7 @@ unsigned int ESP8266_Simple::readIPD(char *responseBuffer, int responseBufferLen
  // Serial.println(bodyResponseOnlyFromLine);
   
   unsigned long startTime         = millis();
-  unsigned long firstPacketWait   = this->generalCommandTimeoutMicroseconds*1000; // If we don't get a packet in this time, abort
+  unsigned long firstPacketWait   = this->generalCommandTimeoutMicroseconds/1000; // If we don't get a packet in this time, abort
   
   char cmdBuffer[128];
   
@@ -630,6 +686,13 @@ unsigned int ESP8266_Simple::readIPD(char *responseBuffer, int responseBufferLen
  
   do
   {
+    ESP82336_DEBUG("TIME: ");
+    ESP82336_DEBUG(millis() - startTime);
+    ESP82336_DEBUG(" COUNT:");
+    ESP82336_DEBUG(packetCount);
+    ESP82336_DEBUG(" UNTIL:");
+    ESP82336_DEBUGLN((!packetCount ? firstPacketWait : (this->generalCommandTimeoutMicroseconds/1000)));
+    
     if(!this->espSerial->waitUntilAvailable()) continue;
     
     if(packetLength == -1)
@@ -679,10 +742,20 @@ unsigned int ESP8266_Simple::readIPD(char *responseBuffer, int responseBufferLen
         }
         else if(cmdBuffer[0] == 'O') // "OK" - signals end of packet data
         {
-          
+          // fall through for next packet
         }
-        else if(cmdBuffer[0] == 'U' && cmdBuffer[5] == 'k') // "Unlink" - signals end of stream
+        else if(cmdBuffer[0] == 'U' && cmdBuffer[5] == 'k') // "Unlink" - signals end of stream  0.9.2.4
         {
+          break;
+        }
+        else if(cmdBuffer[0] == 'C' && cmdBuffer[5] == 'D') // "CLOSED" - signals end of stream 0.9.5.2
+        {
+          break;
+        }
+        else
+        {
+          ESP82336_DEBUG("Unknown IPD?:  ");
+          ESP82336_DEBUGLN(cmdBuffer);
           break;
         }
       }
@@ -707,8 +780,12 @@ unsigned int ESP8266_Simple::readIPD(char *responseBuffer, int responseBufferLen
         ESP82336_DEBUGLN("OVERFLOW");
       }
       
+      ESP82336_DEBUGLN("READ BYTES");
+      
       // Read up to the next newline, or all the remaining response, or as much as we can fit in the buffer, whichever comes first      
       bytesRead = this->espSerial->readBytesUntilAndIncluding('\n', responseBuffer+responseBufferIndex, min(packetLength,responseBufferLength-responseBufferIndex-1));
+      
+      ESP82336_DEBUGLN("DONE READING");
       
       // If we read 1 byte, the index for the next write goes up one (effectivly responseBufferIndex is always the trailing null position
       //  or if you prefer, the number of bytes stored in the buffer)
@@ -840,9 +917,9 @@ unsigned int ESP8266_Simple::readIPD(char *responseBuffer, int responseBufferLen
       break;
     }    
   }
-  while(millis() - startTime < (packetCount ? firstPacketWait : (this->generalCommandTimeoutMicroseconds*1000))); //  Timeout to go here
+  while(millis() - startTime < (packetCount ? firstPacketWait : (this->generalCommandTimeoutMicroseconds/1000))); //  Timeout to go here
   
-  
+  ESP82336_DEBUGLN("READING AL DONE");
   return responseBufferIndex;
 }
 
@@ -1003,7 +1080,7 @@ byte ESP8266_Simple::sendCommand(const char **cmdPartsToConcatenate, byte numPar
       // hope it never happens
       if(this->espSerial->overflow())
       {
-        Serial.println("Overflow in HERE");
+        ESP82336_DEBUG("Overflow");
         this->clearSerialBuffer();
         return ESP8266_OVERFLOW;   
       }
@@ -1023,7 +1100,7 @@ byte ESP8266_Simple::sendCommand(const char **cmdPartsToConcatenate, byte numPar
         // the command is not successful, if no LF is sent, the command is not even attempted      
         if((bytesRead = this->espSerial->readBytesUntil('\n',statusBuffer,sizeof(statusBuffer)-1)))
         {        
-          ESP82336_DEBUG(statusBuffer);
+          ESP82336_DEBUG("DISCARD: "); ESP82336_DEBUG(statusBuffer);
           
           // readBytesUntil does NOT include the terminator, conveniently as we are getting
           // CRLF termination, we can check for the CR instead.
@@ -1057,6 +1134,11 @@ byte ESP8266_Simple::sendCommand(const char **cmdPartsToConcatenate, byte numPar
           if(strncmp_P(statusBuffer, PSTR("Unlink"),   6) == 0) return ESP8266_OK;
           if(strncmp_P(statusBuffer, PSTR("Link is builded"), 15) == 0) return ESP8266_OK;
           
+          // Not sure about this, it appears to happen
+          //   when you issue CIPCLOSE but the browser/client has already 
+          //   closed the connection.  I think.
+          if(strncmp_P(statusBuffer, PSTR("link is not"), 11) == 0) return ESP8266_OK; 
+                                                
           // If we are using a response buffer, and we have reached the start line
           // requested (defaults to line 1)        
           if(responseBufferLength && ( getResponseFromLine <= responseLineNum))
@@ -1064,8 +1146,43 @@ byte ESP8266_Simple::sendCommand(const char **cmdPartsToConcatenate, byte numPar
             // If there is room in the response buffer less one byte, copy the statusbuffer there
             if(responseBufferIndex < responseBufferLength-1)
             {
-              memcpy(responseBuffer+responseBufferIndex, statusBuffer, min(bytesRead, responseBufferLength-1-responseBufferIndex));
-              responseBufferIndex += min(bytesRead, responseBufferLength-1-responseBufferIndex);
+              // Some query commands come back as something like
+              //   +{COMMAND}:"{RESPONSE}"
+              // in which case we only want to give back the stuff between the quotes
+              if(responseBufferIndex == 0 && statusBuffer[0] == '+' && statusBuffer[1] == 'C' && *(((const char *)cmdPartsToConcatenate[0])+3) == 'C')
+              {
+                // Find length of the command
+                for(statusBufferIndex = 1; statusBuffer[statusBufferIndex]; statusBufferIndex++)
+                {
+                  if(statusBuffer[statusBufferIndex] == ':' && statusBuffer[statusBufferIndex+1] == '"' ) 
+                  {                    
+                    break;                  
+                  }
+                }
+                
+                if(statusBuffer[statusBufferIndex]) 
+                {
+                  // Looks like we found such a pattern and the current index is going to be ':'
+                  // advance it to the character after '"' and trim off the trailing '"'
+                  statusBufferIndex += 2;
+                  
+                  if(statusBuffer[bytesRead-2] == '"' && statusBuffer[bytesRead-1] == '\r')
+                  {
+                    statusBuffer[bytesRead-2] = '\r';
+                    statusBuffer[bytesRead-1] = 0;
+                  }
+                }
+                else
+                {
+                  // Didn't find the pattern, so use the full response
+                  statusBufferIndex = 0;
+                }
+              }
+              
+              memcpy(responseBuffer+responseBufferIndex, statusBuffer+statusBufferIndex, min(bytesRead-statusBufferIndex, responseBufferLength-1-responseBufferIndex));
+              responseBufferIndex += min(bytesRead-statusBufferIndex, responseBufferLength-1-responseBufferIndex);
+              
+              statusBufferIndex = 0;
               
               if(statusBuffer[bytesRead-1] == '\r')
               {
@@ -1115,7 +1232,7 @@ byte ESP8266_Simple::sendCommand(const __FlashStringHelper *cmd)
 
 void ESP8266_Simple::clearSerialBuffer()
 {
-  while(this->espSerial->available()) this->espSerial->read();  
+  while(this->espSerial->available()) { this->espSerial->read();  delay(1); }
   this->espSerial->overflow();
 }
 
