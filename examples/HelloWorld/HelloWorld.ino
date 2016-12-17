@@ -108,7 +108,7 @@ void loop()
   
   // For fun, let's add a variable parameter to our fixed request path, first the
   // parameter name itself, which is fixed we will store in FLASH, and then
-  // and then our value, in this case the result of millis which we insert
+  // our value, in this case the result of millis which we insert
   // into the string with ltoa();
   strncpy_P(buffer+strlen(buffer), PSTR("&Millis="), sizeof(buffer)-strlen(buffer)-1);
   ltoa(millis(), buffer+strlen(buffer), 10); // Note "10" is Base10, not a length
