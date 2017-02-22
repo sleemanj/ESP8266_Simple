@@ -440,7 +440,7 @@ byte ESP8266_Simple::serveHttpRequest()
   if(!this->espSerial->available()) return ESP8266_OK; // Nothing to do
 
   char cmdBuffer[64];
-  char hdrBuffer[64];     
+  char hdrBuffer[128];     
   
   char dataBuffer[this->httpServerMaxBufferSize];
   int  requestLength;
@@ -477,7 +477,7 @@ byte ESP8266_Simple::serveHttpRequest()
     // If it's not a raw response, make some headers
     if(!(httpStatusCodeAndType & ESP8266_RAW))
     {
-      strncpy_P(hdrBuffer, PSTR("HTTP/1.0 "), sizeof(hdrBuffer)-1);
+      strncpy_P(hdrBuffer, PSTR("HTTP/1.1 "), sizeof(hdrBuffer)-1);
       itoa( httpStatusCodeAndType & 0x00FFFFFF,hdrBuffer+strlen(hdrBuffer), 10);
       strncpy_P(hdrBuffer+strlen(hdrBuffer), PSTR("\r\nContent-type: "), sizeof(hdrBuffer)-strlen(hdrBuffer)-1);
       
@@ -489,8 +489,11 @@ byte ESP8266_Simple::serveHttpRequest()
           
         case ESP8266_TEXT:
           strncpy_P(hdrBuffer+strlen(hdrBuffer), PSTR("text/plain"), sizeof(hdrBuffer)-strlen(hdrBuffer)-1);
-          break;          
+          break;
 
+        case ESP8266_JSON:
+          strncpy_P(hdrBuffer+strlen(hdrBuffer), PSTR("application/json"), sizeof(hdrBuffer)-strlen(hdrBuffer)-1);
+          break;
       }
       strncpy_P(hdrBuffer + strlen(hdrBuffer), PSTR("\r\nContent-Length: "), sizeof(hdrBuffer) - strlen(hdrBuffer) - 1);
       itoa(strlen(dataBuffer), hdrBuffer + strlen(hdrBuffer), 10);

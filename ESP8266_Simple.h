@@ -58,7 +58,8 @@
 
 #define ESP8266_HTML    0x01000000
 #define ESP8266_TEXT    0x02000000
-#define ESP8266_RAW     0x04000000
+#define ESP8266_JSON    0x04000000
+#define ESP8266_RAW     0x08000000
 
 #include "ESP8266_Serial.h"
 
