@@ -480,8 +480,6 @@ byte ESP8266_Simple::serveHttpRequest()
       strncpy_P(hdrBuffer, PSTR("HTTP/1.1 "), sizeof(hdrBuffer)-1);
       itoa( httpStatusCodeAndType & 0x00FFFFFF,hdrBuffer+strlen(hdrBuffer), 10);
       strncpy_P(hdrBuffer+strlen(hdrBuffer), PSTR("\r\nContent-type: "), sizeof(hdrBuffer)-strlen(hdrBuffer)-1);
-
-      Serial.println(httpStatusCodeAndType & 0xFF000000, HEX);
       
       switch(httpStatusCodeAndType & 0xFF000000)
       {
