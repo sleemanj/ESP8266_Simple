@@ -15,7 +15,7 @@ Later versions (1.0 and greater) may or may not work, I have not tested.
 Download, Install and Example
 -----------------------------
 
-* Download: http://sparks.gogo.co.nz/ESP8266_Simple.zip
+* Download: https://sparks.gogo.co.nz/ESP8266_Simple.zip
 * Open the Arduino IDE (1.0.5)
 * Select the menu item Sketch > Import Library > Add Library
 * Choose to install the ESP8266_Simple.zip file you downloaded
